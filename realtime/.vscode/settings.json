@@ -2,6 +2,9 @@
     "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 4, ColumnLimit: 0}",
     "files.associations": {
         "ethercat.h": "c",
-        "json_object.h": "c"
+        "json_object.h": "c",
+        "cencode.h": "c",
+        "string": "c",
+        "encode.h": "c"
     }
 }

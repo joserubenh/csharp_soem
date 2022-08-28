@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "cGvnN6CbOBphiwYhNr/+DHCwcK17iVitsmpkRwrsLhVLfGgvwGI5nWCLikMtSqHqWztg5jX+GACJwPzWGXhW9w==",
+  "dgSpecHash": "UfLMBirYB9bsch3Nuea8yfh3dFxm7qvS1SEG8nSheLnuwEzHsBclYytKFAFPK7lzBl7jmz42wNuA6eURNObALw==",
   "success": true,
-  "projectFilePath": "/root/csharp_soem/utils/exilibgenerator/codegen.csproj",
+  "projectFilePath": "/root/csharp_soem/utils/exiLibGenerator/codegen.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }

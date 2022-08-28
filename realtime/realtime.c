@@ -9,16 +9,17 @@
 #include <time.h>
 #include <unistd.h>
 
+//#include "b64/cencode.h"
 #include "ethercat.h"
 #include "json-c/json.h"
 #include "json-c/json_object.h"
+#include "b64encoder.c"
 
 #define NSEC_PER_SEC 1000000000
 
 #define RUN_EXIT 0
 #define RUN_RT_BYPASS 1
 #define RUN_RT_PROCESS 2
-
 
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -76,7 +77,7 @@ void ecatthread(void *ptr) {
             ec_receive_processdata(EC_TIMEOUTRET);
             cyclecount++;
 
-            //printf("ZOUP DUDE %d \n", cyclecount);
+            // printf("ZOUP DUDE %d \n", cyclecount);
 
             /* calulate toff to get linux time and DC synced */
             ec_sync(ec_DCtime, nsCycleTime, &timeOffset);
@@ -92,6 +93,8 @@ int errorExit(char *error, int errorCode) {
 int GoOperational() {
     ec_config_map(&IOmap);
     ec_configdc();
+
+    
     ec_slave[0].state = EC_STATE_SAFE_OP;
     ec_writestate(0);
     if (!ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE)) return errorExit("Not all slaves reached EC_STATE_SAFE_OP", 1);
@@ -99,6 +102,8 @@ int GoOperational() {
     /* send one processdata cycle to init SM in slaves */
     ec_send_processdata();
     ec_receive_processdata(EC_TIMEOUTRET);
+
+
 
     ec_slave[0].state = EC_STATE_OPERATIONAL;
     ec_writestate(0);
@@ -108,30 +113,61 @@ int GoOperational() {
 
 #define BUFFSIZE 2048
 char buff[BUFFSIZE];
+char sdobuff[50];
+struct json_object *cmdResponse;
+
+
+
 int commandListener() {
-    int fp;
+    int rtCommandSocket;
     struct json_object *parsed_json;
     json_tokener *tok;
     tok = json_tokener_new();
-    fp = open("../socket/rt_command", O_RDONLY);
-    while (doRun > RUN_EXIT) {
-        size_t dataLength = read(fp, buff, BUFFSIZE);
-        if (dataLength < 1) {
-            usleep(1000);
-            continue;
-        }
+    //base64_encodestate b64State;  
+    char *cmd, *cmdId;
+    char *b64Payload;
+    char* encoded = (char*)malloc(2*BUFFSIZE);
 
-        //printf("COMMAND INPUT:  %s\n", buff);
-        parsed_json = json_tokener_parse_ex(tok, buff, dataLength);
-        struct json_object *json_cmd;
-        json_cmd = json_object_object_get(parsed_json, "cmd");
-        printf("cmdId: %s \n ", json_object_get_string(json_cmd));
+    while (doRun > RUN_EXIT) {
+        rtCommandSocket = open("../socket/rt_command", O_RDONLY);
+        //printf("STR READING:\n");
+        size_t dataLength = 0;
+        while ((dataLength = read(rtCommandSocket, buff, BUFFSIZE))) {
+            //printf("JSON: %s\n", buff);
+            // continue;
+
+            parsed_json = json_tokener_parse_ex(tok, buff, dataLength);
+            cmd = (char *)json_object_get_string(json_object_object_get(parsed_json, "cmd"));
+            cmdId = (char *)json_object_get_string(json_object_object_get(parsed_json, "request_id"));
+
+            if (strcmp(cmd, "sdo_read") == 0) {
+                uint16 slave = json_object_get_uint64(json_object_object_get(parsed_json, "slave"));
+                uint16 index = json_object_get_uint64(json_object_object_get(parsed_json, "index"));
+                uint8 subindex = json_object_get_uint64(json_object_object_get(parsed_json, "subIndex"));
+                boolean ca = json_object_get_boolean(json_object_object_get(parsed_json, "CA"));
+                int readsize = 1024;
+                int wkC = ec_SDOread(slave, index, subindex, FALSE, &readsize, &sdobuff, 500000000);
+               
+                //base64_init_encodestate(&b64State);
+                b64_encode(sdobuff,readsize,encoded);
+                //int cnt = base64_encode_block(sdobuff, readsize, encoded, &b64State);
+                //cnt = base64_encode_blockend(encoded, &b64State);
+
+                cmdResponse = json_object_new_object();
+                json_object_object_add(cmdResponse, "type", json_object_new_string((char *)"response_sdo_read"));
+                json_object_object_add(cmdResponse, "request_id", json_object_new_string(cmdId));
+                json_object_object_add(cmdResponse, "payload", json_object_new_string(encoded));
+                json_object_to_file("/root/csharp_soem/socket/rt_status", cmdResponse);
+                json_object_put(cmdResponse);
+            }
+        }
+        close(rtCommandSocket);
     }
 }
 
 int main() {
-    int cycleTimeUS = 5000;         // cycleTime
-    //cycleTimeUS = 1 * 1000 * 1000;  // set to one full second
+    int cycleTimeUS = 5000;  // cycleTime
+    // cycleTimeUS = 1 * 1000 * 1000;  // set to one full second
 
     struct sched_param param;
     int policy = SCHED_OTHER;
@@ -141,12 +177,14 @@ int main() {
     if (!ec_init("enp2s0")) return errorExit("No socket connection, execute as root", 1);
     if (!(ec_config_init(FALSE) > 0)) return errorExit("No slaves found", 1);
 
+    //GoOperational();  // DELETE WHEN GOING RT
+    commandListener();
+
     // commandListenerThread
     pthread_t curThread;
     pthread_create(&curThread, NULL, (void *)&commandListener, NULL);
     param.sched_priority = 50;
     pthread_setschedparam(curThread, policy, &param);
-
 
     pthread_create(&curThread, NULL, (void *)&ecatthread, (void *)&cycleTimeUS);
     param.sched_priority = 80;

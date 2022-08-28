@@ -5,8 +5,6 @@
 /root/csharp_soem/test/ctbtest/bin/Debug/net6.0/ref/ctbtest.dll
 /root/csharp_soem/test/ctbtest/bin/Debug/net6.0/ctbtest.pdb
 /root/csharp_soem/test/ctbtest/bin/Debug/net6.0/Newtonsoft.Json.dll
-/root/csharp_soem/test/ctbtest/bin/Debug/net6.0/dotnetethercat.dll
-/root/csharp_soem/test/ctbtest/bin/Debug/net6.0/dotnetethercat.pdb
 /root/csharp_soem/test/ctbtest/obj/Debug/net6.0/ctbtest.csproj.AssemblyReference.cache
 /root/csharp_soem/test/ctbtest/obj/Debug/net6.0/ctbtest.GeneratedMSBuildEditorConfig.editorconfig
 /root/csharp_soem/test/ctbtest/obj/Debug/net6.0/ctbtest.AssemblyInfoInputs.cache
