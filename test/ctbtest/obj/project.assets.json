@@ -10,6 +10,19 @@
         "runtime": {
           "lib/netstandard2.0/Newtonsoft.Json.dll": {}
         }
+      },
+      "dotnetethercat/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v6.0",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.1"
+        },
+        "compile": {
+          "bin/placeholder/dotnetethercat.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/dotnetethercat.dll": {}
+        }
       }
     }
   },
@@ -40,11 +53,16 @@
         "newtonsoft.json.nuspec",
         "packageIcon.png"
       ]
+    },
+    "dotnetethercat/1.0.0": {
+      "type": "project",
+      "path": "../../dotnetethercat/dotnetethercat.csproj",
+      "msbuildProject": "../../dotnetethercat/dotnetethercat.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net6.0": [
-      "Newtonsoft.Json >= 13.0.1"
+      "dotnetethercat >= 1.0.0"
     ]
   },
   "packageFolders": {
@@ -53,11 +71,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj",
-      "projectName": "dotnetethercat",
-      "projectPath": "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj",
+      "projectUniqueName": "/root/csharp_soem/test/ctbtest/ctbtest.csproj",
+      "projectName": "ctbtest",
+      "projectPath": "/root/csharp_soem/test/ctbtest/ctbtest.csproj",
       "packagesPath": "/root/.nuget/packages/",
-      "outputPath": "/root/csharp_soem/dotnetethercat/obj/",
+      "outputPath": "/root/csharp_soem/test/ctbtest/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/root/.nuget/NuGet/NuGet.Config"
@@ -71,7 +89,11 @@
       "frameworks": {
         "net6.0": {
           "targetAlias": "net6.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj": {
+              "projectPath": "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj"
+            }
+          }
         }
       },
       "warningProperties": {
@@ -83,12 +105,6 @@
     "frameworks": {
       "net6.0": {
         "targetAlias": "net6.0",
-        "dependencies": {
-          "Newtonsoft.Json": {
-            "target": "Package",
-            "version": "[13.0.1, )"
-          }
-        },
         "imports": [
           "net461",
           "net462",

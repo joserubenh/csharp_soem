@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
 #include <sched.h>
@@ -9,7 +10,8 @@
 #include <unistd.h>
 
 #include "ethercat.h"
-#include "json_object.h"
+#include "json-c/json.h"
+#include "json-c/json_object.h"
 
 #define NSEC_PER_SEC 1000000000
 
@@ -17,7 +19,7 @@
 #define RUN_RT_BYPASS 1
 #define RUN_RT_PROCESS 2
 
-pthread_t rtThread;
+
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 struct sched_param schedp;
@@ -47,7 +49,7 @@ void set_timespec(struct timespec *ts, int64 setNanoseconds) {
 
 int64 integral = 0;
 void ec_sync(int64 reftime, int64 cycletime, int64 *offsettime) {
-    /* PI calculation to get linux time synced to DC time */    
+    /* PI calculation to get linux time synced to DC time */
     /* set linux sync point 50us later than DC sync, just as example */
     int64 delta = (reftime - 50000) % cycletime;
     if (delta > (cycletime / 2)) delta = delta - cycletime;
@@ -74,7 +76,7 @@ void ecatthread(void *ptr) {
             ec_receive_processdata(EC_TIMEOUTRET);
             cyclecount++;
 
-            printf("ZOUP DUDE %d \n", cyclecount);
+            //printf("ZOUP DUDE %d \n", cyclecount);
 
             /* calulate toff to get linux time and DC synced */
             ec_sync(ec_DCtime, nsCycleTime, &timeOffset);
@@ -104,9 +106,32 @@ int GoOperational() {
     doRun = RUN_RT_PROCESS;
 }
 
+#define BUFFSIZE 2048
+char buff[BUFFSIZE];
+int commandListener() {
+    int fp;
+    struct json_object *parsed_json;
+    json_tokener *tok;
+    tok = json_tokener_new();
+    fp = open("../socket/rt_command", O_RDONLY);
+    while (doRun > RUN_EXIT) {
+        size_t dataLength = read(fp, buff, BUFFSIZE);
+        if (dataLength < 1) {
+            usleep(1000);
+            continue;
+        }
+
+        //printf("COMMAND INPUT:  %s\n", buff);
+        parsed_json = json_tokener_parse_ex(tok, buff, dataLength);
+        struct json_object *json_cmd;
+        json_cmd = json_object_object_get(parsed_json, "cmd");
+        printf("cmdId: %s \n ", json_object_get_string(json_cmd));
+    }
+}
+
 int main() {
     int cycleTimeUS = 5000;         // cycleTime
-    cycleTimeUS = 1 * 1000 * 1000;  // set to one full second
+    //cycleTimeUS = 1 * 1000 * 1000;  // set to one full second
 
     struct sched_param param;
     int policy = SCHED_OTHER;
@@ -116,8 +141,16 @@ int main() {
     if (!ec_init("enp2s0")) return errorExit("No socket connection, execute as root", 1);
     if (!(ec_config_init(FALSE) > 0)) return errorExit("No slaves found", 1);
 
-    pthread_create(&rtThread, NULL, (void *)&ecatthread, (void *)&cycleTimeUS);
+    // commandListenerThread
+    pthread_t curThread;
+    pthread_create(&curThread, NULL, (void *)&commandListener, NULL);
+    param.sched_priority = 50;
+    pthread_setschedparam(curThread, policy, &param);
+
+
+    pthread_create(&curThread, NULL, (void *)&ecatthread, (void *)&cycleTimeUS);
     param.sched_priority = 80;
+    pthread_setschedparam(curThread, policy, &param);
 
     // usleep(500 * 1000);
 
@@ -129,11 +162,6 @@ int main() {
     sched_setscheduler(0, SCHED_OTHER, &schedp);
     printf("End program\n");
     return (0);
-    
-    //ec_SDOwrite(1,0x1c12,01,FALSE,os,&ob2,EC_TIMEOUTRXM);
-}
 
-//    os=sizeof(ob2); ob2 = 0x1601;
-    
-//    os=sizeof(ob2); ob2 = 0x1a01;
-//    ec_SDOwrite(1,0x1c13,01,FALSE,os,&ob2,EC_TIMEOUTRXM);
+    // ec_SDOwrite(1,0x1c12,01,FALSE,os,&ob2,EC_TIMEOUTRXM);
+}
