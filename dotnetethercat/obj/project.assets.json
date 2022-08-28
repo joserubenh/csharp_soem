@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/root/csharp_soem/utils/networkMapper/networkMapper.csproj",
-      "projectName": "networkMapper",
-      "projectPath": "/root/csharp_soem/utils/networkMapper/networkMapper.csproj",
+      "projectUniqueName": "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj",
+      "projectName": "dotnetethercat",
+      "projectPath": "/root/csharp_soem/dotnetethercat/dotnetethercat.csproj",
       "packagesPath": "/root/.nuget/packages/",
-      "outputPath": "/root/csharp_soem/utils/networkMapper/obj/",
+      "outputPath": "/root/csharp_soem/dotnetethercat/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/root/.nuget/NuGet/NuGet.Config"
