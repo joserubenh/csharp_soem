@@ -23,6 +23,7 @@ public class commandWriteLoop
             System.Text.ASCIIEncoding.ASCII)
             { };
 
+    Console.WriteLine("Write Pipe Connected");
         while (true)
         {
             var nextCommand = await CommandQueue.ReceiveAsync();           
@@ -36,13 +37,15 @@ public class commandWriteLoop
     {
         [JsonProperty] public abstract string cmd { get; }
         [JsonProperty] public Int64 request_id { get => cmdId; }
+        public abstract Boolean ExpectResponse { get; }
+
         private static Int64 cmdId = 1500;
         private Int64 _cmdId = 0;
         public Action? ResponseCallback; 
         public void Post()
         {
             _cmdId = Interlocked.Increment(ref cmdId);
-            RequestDictionary.TryAdd(_cmdId,this);
+           if (ExpectResponse) RequestDictionary.TryAdd(_cmdId,this);
             CommandQueue.Post(this);            
         }
 

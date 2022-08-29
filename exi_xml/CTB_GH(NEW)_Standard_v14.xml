@@ -26739,7 +26739,7 @@
                   <SubItem>
                     <Name>SubIndex 002</Name>
                     <Info />
-                  </SubItem>
+                  </SubItem>  GoOperational();
                   <SubItem>
                     <Name>SubIndex 003</Name>
                     <Info />

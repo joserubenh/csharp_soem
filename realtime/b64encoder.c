@@ -128,5 +128,5 @@ int b64_decode(const char *in, unsigned char *out, size_t outlen)
 			out[j+2] = v & 0xFF;
 	}
 
-	return 1;
+	return b64_decoded_size(in);
 }

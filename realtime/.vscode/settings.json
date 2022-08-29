@@ -5,6 +5,7 @@
         "json_object.h": "c",
         "cencode.h": "c",
         "string": "c",
-        "encode.h": "c"
+        "encode.h": "c",
+        "ethercattype.h": "c"
     }
 }
