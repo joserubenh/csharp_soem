@@ -8,8 +8,9 @@
                 "-fdiagnostics-color=always",
                 "-g",
                 "${file}",
-                "-o",
-                "${fileDirname}/${fileBasenameNoExtension}",
+                "-o" , 
+                "${fileDirname}/realtime",
+
                 "-I/root/soem/install/include/soem/",
                 "-L/root/soem/install/lib",
                 "-lsoem",

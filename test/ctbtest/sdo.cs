@@ -4,6 +4,9 @@ using System.Buffers.Binary;
 
 public sealed class sdo {
     private sdo() { }
+
+
+
     public class SdoReadRequest : commandWriteLoop.CommandRequest {
         public override string cmd => "sdo_read";
         [JsonProperty] public UInt16 slave { get; }
@@ -44,7 +47,7 @@ public sealed class sdo {
                 return ($"{init.Substring(0, 4)} {init.Substring(4)}");
             })).PadLeft(55).Substring(0, 55 );
 
-            var sbAddrHex = String.Join("", BitConverter.GetBytes(ReadRequest.subIndex).
+            var sbAddrHex = String.Join("", BitConverter.GetBytes(ReadRequest.subIndex).Reverse().
                Select(x => ReadRequest.CA?"":x.ToString("X2"))).PadLeft(4, '0');
            
             var addrHexStr = string.Join("", BitConverter.GetBytes(ReadRequest.index).Select(x => x.ToString("X2"))).PadLeft(4, '0');
