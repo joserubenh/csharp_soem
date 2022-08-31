@@ -15,6 +15,7 @@
 #include "ethercattype.h"
 #include "json-c/json.h"
 #include "json-c/json_object.h"
+#include "servo.c"
 
 #define NSEC_PER_SEC 1000000000
 
@@ -51,47 +52,12 @@ void set_timespec(struct timespec *ts, int64 setNanoseconds) {
 
 int64 integral = 0;
 void ec_sync(int64 reftime, int64 cycletime, int64 *offsettime) {
-    /* PI calculation to get linux time synced to DC time */
-    /* set linux sync point 50us later than DC sync, just as example */
     int64 delta = (reftime - 50000) % cycletime;
     if (delta > (cycletime / 2)) delta = delta - cycletime;
     if (delta > 0) integral++;
     if (delta < 0) integral--;
     *offsettime = -(delta / 100) - (integral / 20);
 }
-
-typedef struct PACKED {
-    uint16 ControlWord;          // 0x6040 10	16	UINT	ControlWorld
-    uint8 ModesOfOperation;      // 0x6060 08	8	USINT	Modes of operation
-    int32 TargetVelocity;        // 0x60ff 20	32	DINT	Target velocity
-    int32 TargetPosition;        // 0x607a 20	32	DINT	Target position
-    int16 TargetTorque;          // 0x6071 10	16	INT	    Target torque
-    uint32 DigitalOutputs;       // 0x60fe 20	32	UDINT	Digital outputs
-    uint16 TouchProbeFunction;   // 0x60b8 10	16	UINT	Touch probe function
-    int16 Analog1OutputControl;  // 0x6100 10	16	INT	    Analog1 Output Control
-    int16 Analog2OutputControl;  // 0x6101 10	16	INT	    Analog2 Output Control
-} output_CTBServo_RxPDO_t;
-
-typedef struct PACKED {
-    uint16 ErrorCode;                     // 0x603f0 010	16	UINT	Error code
-    uint16 StatusWord;                    // 0x60410 010	16	UINT	statusword
-    uint8 ModesOfOperationDisplay;        // 0x60610 008	8	USINT	Modes of operation display
-    int32 VelocityAV;                     // 0x606c0 020	32	DINT	Velocity AV
-    int32 PositionAV;                     // 0x60640 020	32	DINT	Position AV
-    int16 TorqueAV;                       // 0x60770 010	16	INT	    Torque AV
-    int16 CurrentAV;                      // 0x60780 010	16	INT	    Current AV
-    int32 FollowingErrorAV;               // 0x60f40 020	32	DINT	Following error AV
-    uint32 IgitalInputs;                  // 0x60fd0 020	32	UDINT	Digital inputs
-    uint16 TouchProbeStatus;              // 0x60b90 010	16	UINT	Tourch probe status
-    int32 TouchProbePos1PosValue;         // 0x60ba0 020	32	DINT	Touch Probe pos1 pos value
-    int32 TourchProbePos1NegValue;        // 0x60bb0 020	32	DINT	Touch probe pos1 neg value
-    int32 TouchProbePos2PosValue;         // 0x60bc0 020	32	DINT	touch probe pos2 pos value
-    int32 TouchProbePos2NegValue;         // 0x60bd0 020	32	DINT	Touch probe pos2 neg value
-    int16 AnalogInputMonitoring;          // 0x62000 010	16	INT	    Analog Input Monitoring
-    int16 Analog2InputMonitoring;         // 0x62010 010	16	INT	    Analog2 Input Monitoring
-    int32 T4VelocitySensorActualValue;    // 0x60690 020	32	DINT	T4 velocity sensor actual value
-    int32 T4PositionActualInternalValue;  // 0x60630 020	32	DINT	T4 position actual internal value
-} input_CTBServo_TxPDO_t;
 
 output_CTBServo_RxPDO_t *out_ctb;
 input_CTBServo_TxPDO_t *in_ctb;
@@ -109,23 +75,28 @@ void ecatthread(void *ptr) {
         clock_gettime(CLOCK_MONOTONIC, &wakeUpTime);          // Each cycle calculation
         add_timespec(&wakeUpTime, nsCycleTime + timeOffset);  // set sleep cycle
         clock_nanosleep(CLOCK_MONOTONIC, 1, &wakeUpTime, NULL);
-        // printf(".");
 
         if (doRun >= RUN_RT_PROCESS) {
+            out_ctb->ModesOfOperation = OP_MODE_VELOCITY;  //
+
             ec_send_processdata();
             ec_receive_processdata(EC_TIMEOUTRET);
 
-            // DebugPos += 2000;
-            // in_ctb->ModesOfOperation = 3; //ProfileVelocity
-            out_ctb->ModesOfOperation = 8;  // CSP (Cyclic synchronous position)
+            uint16 controlword = 0x00;
 
-            out_ctb->ControlWord = 0x0F;
-            // in_ctb->TargetVelocity = 100;
-            out_ctb->TargetPosition = in_ctb->PositionAV;
-            ;
+            ec_slavet curslave = ec_slave[1];
+
+            int isenabled = ServoOn_GetCtrlWrd(in_ctb->StatusWord, &controlword);
+            if (isenabled == 0) {
+                out_ctb->ControlWord = controlword;
+                continue;
+            }
+
+            out_ctb->ControlWord = 0x1F;
+            // out_ctb->TargetPosition = cyclecount * 200;
+            out_ctb->TargetVelocity = 100;
 
             cyclecount++;
-
             ec_sync(ec_DCtime, nsCycleTime, &timeOffset);
         }
     }
@@ -138,14 +109,14 @@ int errorExit(char *error, int errorCode) {
 
 int GoOperational() {
     ec_config_map(&IOmap);
-    ec_configdc();
-   printf("DC capable : %d\n",ec_configdc());
-
-    // MAPPING FOR DEBUGGING
-    out_ctb = (output_CTBServo_RxPDO_t *)ec_slave[1].outputs;
-    in_ctb = (input_CTBServo_TxPDO_t *)ec_slave[1].inputs;
-
     ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
+    ec_configdc();
+    ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
+    printf("DC capable : %d\n",ec_configdc());
+
+
+
+    
 
     ec_slave[0].state = EC_STATE_SAFE_OP;
     ec_writestate(0);
@@ -153,14 +124,25 @@ int GoOperational() {
 
     ec_readstate();
     /* send one processdata cycle to init SM in slaves */
+
     ec_send_processdata();
     ec_receive_processdata(EC_TIMEOUTRET);
 
-    // ec_dcsync0(1, TRUE, 5*1000, 0); //Given in naoseconds
+    //ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
 
     ec_slave[0].state = EC_STATE_OPERATIONAL;
     ec_writestate(0);
     if (!ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE)) return errorExit("Not all slaves reached EC_STATE_OPERATIONAL", 1);
+
+    //ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
+
+
+    usleep(500*1000);
+
+    // MAPPING FOR DEBUGGING
+    out_ctb = (output_CTBServo_RxPDO_t *)ec_slave[1].outputs;
+    in_ctb = (input_CTBServo_TxPDO_t *)ec_slave[1].inputs;
+
     doRun = RUN_RT_PROCESS;
 
     printf("ALL SLAVES REACHED OPERATIONAL STATE\n");
@@ -171,7 +153,7 @@ char buff[BUFFSIZE];
 char sdobuff[50];
 struct json_object *response;
 
-int jsonCommandInterface() {
+int JsonInterface() {
     int rtCommandPipe;
     int rtStatusPipe;
 
@@ -245,12 +227,12 @@ int main() {
     if (!ec_init("enp2s0")) return errorExit("No socket connection, execute as root", 1);
     if (!(ec_config_init(FALSE) > 0)) return errorExit("No slaves found", 1);
 
-    // GoOperational();  // DELETE WHEN GOING RT
+    GoOperational();  // DELETE WHEN GOING RT
     // commandListener();
 
     // commandListenerThread
     pthread_t curThread;
-    pthread_create(&curThread, NULL, (void *)&jsonCommandInterface, NULL);
+    pthread_create(&curThread, NULL, (void *)&JsonInterface, NULL);
     param.sched_priority = 50;
     pthread_setschedparam(curThread, policy, &param);
 
@@ -260,7 +242,7 @@ int main() {
 
     // usleep(500 * 1000);
 
-    GoOperational();
+    // GoOperational();
     while (doRun > RUN_EXIT) usleep(1000);
 
     schedp.sched_priority = 0;
