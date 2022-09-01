@@ -15,137 +15,64 @@
 #include "ethercattype.h"
 #include "json-c/json.h"
 #include "json-c/json_object.h"
-#include "servo.c"
+#include "servo-utils.c"
 
 #define NSEC_PER_SEC 1000000000
 
-#define RUN_EXIT 0
-#define RUN_RT_BYPASS 1
-#define RUN_RT_PROCESS 2
+#define RUN_STATE_EXIT 0
+#define RUN_PRE_OP 2
+#define RUN_RT_BYPASS 2
+#define RUN_RT_PROCESS 3
 
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 struct sched_param schedp;
 int doRun = 0;
 
+int expectedWKC = 0;
+
 char IOmap[4096];
-
-void add_timespec(struct timespec *ts, int64 addTimeNanoseconds) {
-    int64 sec, nsec;
-
-    nsec = addTimeNanoseconds % NSEC_PER_SEC;
-    sec = (addTimeNanoseconds - nsec) / NSEC_PER_SEC;
-    ts->tv_sec += sec;
-    ts->tv_nsec += nsec;
-    if (ts->tv_nsec > NSEC_PER_SEC) {
-        nsec = ts->tv_nsec % NSEC_PER_SEC;
-        ts->tv_sec += (ts->tv_nsec - nsec) / NSEC_PER_SEC;
-        ts->tv_nsec = nsec;
-    }
-}
-
-void set_timespec(struct timespec *ts, int64 setNanoseconds) {
-    ts->tv_nsec = 0;
-    ts->tv_sec = 0;
-    add_timespec(ts, setNanoseconds);
-}
-
-int64 integral = 0;
-void ec_sync(int64 reftime, int64 cycletime, int64 *offsettime) {
-    int64 delta = (reftime - 50000) % cycletime;
-    if (delta > (cycletime / 2)) delta = delta - cycletime;
-    if (delta > 0) integral++;
-    if (delta < 0) integral--;
-    *offsettime = -(delta / 100) - (integral / 20);
-}
 
 output_CTBServo_RxPDO_t *out_ctb;
 input_CTBServo_TxPDO_t *in_ctb;
 
 /* RT EtherCAT thread */
-void ecatthread(void *ptr) {
+void realTimeThread(void *ptr) {
     struct timespec wakeUpTime;
     int64 timeOffset = 0;
     int cyclecount = 0;
     int64 nsCycleTime = *(int *)ptr * 1000; /* cycletime in ns */
-    // clock_gettime(CLOCK_MONOTONIC, &wakeUpTime);
-    // int32 DebugPos = 0;
-
-    while (doRun > RUN_EXIT) {
+    
+    boolean isPositionSet = FALSE;
+    int32 pos; 
+    while (doRun > RUN_STATE_EXIT) {
         clock_gettime(CLOCK_MONOTONIC, &wakeUpTime);          // Each cycle calculation
         add_timespec(&wakeUpTime, nsCycleTime + timeOffset);  // set sleep cycle
         clock_nanosleep(CLOCK_MONOTONIC, 1, &wakeUpTime, NULL);
 
-        if (doRun >= RUN_RT_PROCESS) {
-            out_ctb->ModesOfOperation = OP_MODE_VELOCITY;  //
+        if (doRun >= RUN_RT_BYPASS) {
+            int send = ec_send_processdata();
+            int wkc = ec_receive_processdata(200000);
 
-            ec_send_processdata();
-            ec_receive_processdata(EC_TIMEOUTRET);
+            if ((wkc == expectedWKC) && (doRun >= RUN_RT_PROCESS)) {
+                if (!isPositionSet){
+                    isPositionSet = TRUE;
+                    pos = in_ctb->PositionAV;
+                }
+                pos += 10000;
+                  
+                out_ctb->ModesOfOperation = OP_MODE_CYCLIC_SYNC_POSITION;  //
+                              
+                ec_slavet curslave = ec_slave[1];
+                out_ctb->ControlWord = 0x0F;
+                out_ctb->TargetPosition = pos;
 
-            uint16 controlword = 0x00;
-
-            ec_slavet curslave = ec_slave[1];
-
-            int isenabled = ServoOn_GetCtrlWrd(in_ctb->StatusWord, &controlword);
-            if (isenabled == 0) {
-                out_ctb->ControlWord = controlword;
-                continue;
+                cyclecount++;
             }
 
-            out_ctb->ControlWord = 0x1F;
-            // out_ctb->TargetPosition = cyclecount * 200;
-            out_ctb->TargetVelocity = 100;
-
-            cyclecount++;
-            ec_sync(ec_DCtime, nsCycleTime, &timeOffset);
+            ec_sync(ec_DCtime, nsCycleTime,  &timeOffset);
         }
     }
-}
-
-int errorExit(char *error, int errorCode) {
-    printf("ERROR EXIT:>> %s \n", error);
-    return errorCode;
-}
-
-int GoOperational() {
-    ec_config_map(&IOmap);
-    ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
-    ec_configdc();
-    ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
-    printf("DC capable : %d\n",ec_configdc());
-
-
-
-    
-
-    ec_slave[0].state = EC_STATE_SAFE_OP;
-    ec_writestate(0);
-    if (!ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE)) return errorExit("Not all slaves reached EC_STATE_SAFE_OP", 1);
-
-    ec_readstate();
-    /* send one processdata cycle to init SM in slaves */
-
-    ec_send_processdata();
-    ec_receive_processdata(EC_TIMEOUTRET);
-
-    //ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
-
-    ec_slave[0].state = EC_STATE_OPERATIONAL;
-    ec_writestate(0);
-    if (!ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE)) return errorExit("Not all slaves reached EC_STATE_OPERATIONAL", 1);
-
-    //ec_dcsync0(1, TRUE, 5 * 1000, 0);  // Given in naoseconds
-
-
-    usleep(500*1000);
-
-    // MAPPING FOR DEBUGGING
-    out_ctb = (output_CTBServo_RxPDO_t *)ec_slave[1].outputs;
-    in_ctb = (input_CTBServo_TxPDO_t *)ec_slave[1].inputs;
-
-    doRun = RUN_RT_PROCESS;
-
-    printf("ALL SLAVES REACHED OPERATIONAL STATE\n");
 }
 
 #define BUFFSIZE 2048
@@ -166,7 +93,7 @@ int JsonInterface() {
     char *encoded = (char *)malloc(2 * BUFFSIZE);
     char *jsonOutput = (char *)malloc(3 * BUFFSIZE);
 
-    while (doRun > RUN_EXIT) {
+    while (doRun > RUN_STATE_EXIT) {
         rtStatusPipe = open("../socket/rt_status", O_WRONLY);
         rtCommandPipe = open("../socket/rt_command", O_RDONLY);
 
@@ -215,36 +142,81 @@ int JsonInterface() {
     }
 }
 
+int errorExit(char *error, int errorCode) {
+    printf("ERROR EXIT:>> %s \n", error);
+    return errorCode;
+}
+
 int main() {
     int cycleTimeUS = 5000;  // cycleTime in MICROSECONDS
-    // cycleTimeUS = 1 * 1000 * 1000;  // set to one full second
 
     struct sched_param param;
     int policy = SCHED_OTHER;
-    doRun = RUN_RT_BYPASS;
+    doRun = RUN_PRE_OP;
     memset(&param, 0, sizeof(param));
 
     if (!ec_init("enp2s0")) return errorExit("No socket connection, execute as root", 1);
     if (!(ec_config_init(FALSE) > 0)) return errorExit("No slaves found", 1);
+    printf("%d slaves found and configured.\n", ec_slavecount);
 
-    GoOperational();  // DELETE WHEN GOING RT
-    // commandListener();
-
-    // commandListenerThread
     pthread_t curThread;
+
+    // start up the JSON-API
     pthread_create(&curThread, NULL, (void *)&JsonInterface, NULL);
     param.sched_priority = 50;
     pthread_setschedparam(curThread, policy, &param);
 
-    pthread_create(&curThread, NULL, (void *)&ecatthread, (void *)&cycleTimeUS);
+    // StartUp the real-time thread.
+    pthread_create(&curThread, NULL, (void *)&realTimeThread, (void *)&cycleTimeUS);
     param.sched_priority = 80;
     pthread_setschedparam(curThread, policy, &param);
 
-    // usleep(500 * 1000);
+    ec_config_map(&IOmap);
+    ec_configdc();
+    ec_dcsync0(1, TRUE, 5000000U, 0);  // Given in naoseconds
 
-    // GoOperational();
-    while (doRun > RUN_EXIT) usleep(1000);
+    expectedWKC = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
+    ec_slave[0].state = EC_STATE_SAFE_OP;
 
+    ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE);
+    printf("ALL SLAVES REACHED EC_STATE_SAFE_OP\n");
+    printf("DC capable : %d\n", ec_configdc());
+
+    out_ctb = (output_CTBServo_RxPDO_t *)ec_slave[1].outputs;
+    in_ctb = (input_CTBServo_TxPDO_t *)ec_slave[1].inputs;
+
+    ec_readstate();
+
+    for (int cnt = 1; cnt <= ec_slavecount; cnt++) {
+        printf("Slave:%d Name:%s Output size:%3dbits Input size:%3dbits State:%2d delay:%d.%d\n",
+               cnt, ec_slave[cnt].name, ec_slave[cnt].Obits, ec_slave[cnt].Ibits,
+               ec_slave[cnt].state, (int)ec_slave[cnt].pdelay, ec_slave[cnt].hasdc);
+    }
+
+    printf("Request operational state for all slaves\n");
+
+    ec_send_processdata();
+    ec_receive_processdata(EC_TIMEOUTRET);
+
+    ec_slave[0].state = EC_STATE_OPERATIONAL;
+    ec_writestate(0);
+
+    ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTSTATE);
+
+    if (ec_slave[0].state == EC_STATE_OPERATIONAL) {
+        printf("Operational state reached for all slaves.\n");
+        doRun = RUN_RT_BYPASS;
+        usleep(100 * 1000);               // wait for linux to sync on DC
+        ec_dcsync0(1, TRUE, 5000000, 0);  // SYNC0 on slave 1
+        usleep(100 * 000);                // wait for linux to sync on DC
+
+        doRun = RUN_RT_PROCESS;
+        while (doRun > RUN_STATE_EXIT) usleep(100 * 1000);  // CYCLE THIS THREAD.
+    } else {
+        doRun = RUN_STATE_EXIT;  // REQUEST OTHER CYCLES TO CLOSE GRACEFULLY
+    }
+
+    usleep(100 * 1000);  // Lets wait 100ms to finish.
     schedp.sched_priority = 0;
     sched_setscheduler(0, SCHED_OTHER, &schedp);
     printf("End program\n");
@@ -252,3 +224,12 @@ int main() {
 
     // ec_SDOwrite(1,0x1c12,01,FALSE,os,&ob2,EC_TIMEOUTRXM);
 }
+
+// configure the slave
+// map the slave
+// configure distributed clock
+// go to safe-op
+// start pdo data transfer (LRW or LRD/LWR) at the desired DC interval (for example 1ms)
+// check for stable DC clock in all slaves (difference timer)
+// check for stable master clock (digital PLL locked to reference slave)
+// only then request OP
