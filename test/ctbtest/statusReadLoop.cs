@@ -19,9 +19,8 @@ public sealed class statusReadLoop {
                 if (inputLength == 0) break;              
                 var responseObject = JObject.Parse(System.Text.Encoding.ASCII.GetString(buffer,0,inputLength));
                 var requestId = responseObject.GetValue("request_id")!.Value<Int64>();
-                if (commandWriteLoop.RequestDictionary.TryGetValue(requestId, out var request)) {
-                    request.HanldeResponse(responseObject);
-                    _ = Task.Run(() => request.ResponseCallback?.Invoke());
+                if (commandWriteLoop.RequestDictionary.TryGetValue(requestId, out var request)) {                    
+                    _ = Task.Run(() => request.HandleSignalResponse(responseObject)); //Run async.
                 };
             } while (inputLength > 0);
         }

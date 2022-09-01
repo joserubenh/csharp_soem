@@ -76,7 +76,7 @@ void realTimeThread(void *ptr) {
 }
 
 #define BUFFSIZE 2048
-char buff[BUFFSIZE];
+char JSONBuffer[BUFFSIZE];
 char sdobuff[50];
 struct json_object *response;
 
@@ -99,8 +99,8 @@ int JsonInterface() {
 
         printf("ConnectedPipes:\n");
         size_t dataLength = 0;
-        while ((dataLength = read(rtCommandPipe, buff, BUFFSIZE))) {
-            json_input = json_tokener_parse_ex(tok, buff, dataLength);
+        while ((dataLength = read(rtCommandPipe, JSONBuffer, BUFFSIZE))) {
+            json_input = json_tokener_parse_ex(tok, JSONBuffer, dataLength);
             cmd = (char *)json_object_get_string(json_object_object_get(json_input, "cmd"));
             request_id = (char *)json_object_get_string(json_object_object_get(json_input, "request_id"));
 
@@ -135,6 +135,17 @@ int JsonInterface() {
                 json_object_to_fd(rtStatusPipe, response, JSON_C_TO_STRING_PLAIN);
                 json_object_put(response);
             }
+
+            if (strcmp(cmd, "ec_status") == 0) {
+                response = json_object_new_object();
+                json_object_object_add(response, "request_id", json_object_new_string(request_id));
+                json_object_object_add(response, "ec_dctime", json_object_new_int64(ec_DCtime));
+                json_object_object_add(response, "slave_count", json_object_new_int(ec_slavecount));                
+                json_object_to_fd(rtStatusPipe, response, JSON_C_TO_STRING_PLAIN);
+                json_object_put(response);
+            }
+
+
         }
 
         close(rtCommandPipe);

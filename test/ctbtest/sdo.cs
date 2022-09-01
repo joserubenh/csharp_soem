@@ -15,15 +15,26 @@ public sealed class sdo {
         [JsonProperty] public Boolean CA { get; }
         public override bool ExpectResponse => true;
         public byte[]? PayloadResponseBytes;
-        public SdoReadRequest(ushort slave, ushort index, ushort subIndex, bool cA) {
+
+        public SdoReadRequest(ushort slave, ushort index) {
             this.slave = slave;
             this.index = index;
             this.subIndex = subIndex;
-            CA = cA;
+            CA = true;
         }
-        public override void HanldeResponse(JObject response) {
-            var base64Payload = response.SelectToken("payload")!.Value<string>() ?? "";
+
+        public SdoReadRequest(ushort slave, ushort index, ushort subIndex) {
+            this.slave = slave;
+            this.index = index;
+            this.subIndex = subIndex;
+            CA = false;
+        }
+
+        public async Task<SdoReadResponse> GetResultAsync() {
+            var response = await PostAsync();
+            var base64Payload = response!.SelectToken("payload")!.Value<string>() ?? "";
             PayloadResponseBytes = Convert.FromBase64String(base64Payload);
+            return new sdo.SdoReadResponse(PayloadResponseBytes, this);
         }
     }
 
@@ -45,11 +56,11 @@ public sealed class sdo {
             var resultBinaryString = string.Join(" | ", req.Select(x => {
                 var init = Convert.ToString(x, 2).PadLeft(8, '0');
                 return ($"{init.Substring(0, 4)} {init.Substring(4)}");
-            })).PadLeft(55).Substring(0, 55 );
+            })).PadLeft(55).Substring(0, 55);
 
             var sbAddrHex = String.Join("", BitConverter.GetBytes(ReadRequest.subIndex).Reverse().
-               Select(x => ReadRequest.CA?"":x.ToString("X2"))).PadLeft(4, '0');
-           
+               Select(x => ReadRequest.CA ? "" : x.ToString("X2"))).PadLeft(4, '0');
+
             var addrHexStr = string.Join("", BitConverter.GetBytes(ReadRequest.index).Select(x => x.ToString("X2"))).PadLeft(4, '0');
             return $" x{addrHexStr} {sbAddrHex} {resultHexString} h {resultBinaryString} b";
         }
@@ -68,18 +79,31 @@ public sealed class sdo {
         public byte[] binaryData { get; }
         public override bool ExpectResponse => true;
         //public byte[]? PayloadResponseBytes;
-        public SdoWriteRequest(ushort slave, ushort index, ushort subIndex, bool cA, byte[] binaryData) {
+        
+        public SdoWriteRequest(ushort slave, ushort index, byte[] binaryData) {
+            this.slave = slave;
+            this.index = index;            
+            CA = true;
+            this.binaryData = binaryData;
+        }
+
+        public SdoWriteRequest(ushort slave, ushort index, ushort subIndex, byte[] binaryData) {
             this.slave = slave;
             this.index = index;
             this.subIndex = subIndex;
-            CA = cA;
+            CA = false;
             this.binaryData = binaryData;
         }
-        public override void HanldeResponse(JObject response) {
-            //var base64Payload = response.SelectToken("payload")!.Value<string>() ?? "";
-            //PayloadResponseBytes = Convert.FromBase64String(base64Payload);
+
+        public async Task<SdoWriteResponse> WriteToSDO() {
+            var response = await PostAsync();
+            return new sdo.SdoWriteResponse(this);
         }
+
     }
+
+
+
 
     public class SdoWriteResponse {
         public SdoWriteResponse(SdoWriteRequest readRequest) {
