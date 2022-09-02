@@ -93,6 +93,8 @@ int JsonInterface() {
     char *encoded = (char *)malloc(2 * BUFFSIZE);
     char *jsonOutput = (char *)malloc(3 * BUFFSIZE);
 
+       
+
     while (doRun > RUN_STATE_EXIT) {
         rtStatusPipe = open("../socket/rt_status", O_WRONLY);
         rtCommandPipe = open("../socket/rt_command", O_RDONLY);

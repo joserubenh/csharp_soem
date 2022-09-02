@@ -26,6 +26,12 @@ while (true) {
     Console.WriteLine("ActualPosition :" + (new sdo.SdoReadRequest(1, 0x6064)).GetResultAsync().Result.ToDebugString());
     Console.WriteLine();
 
+    // while (true){
+    //      Console.WriteLine("ActualPosition :" + (new sdo.SdoReadRequest(1, 0x6064)).GetResultAsync().Result.ToDebugString());
+    //      Console.WriteLine("Following Error:" + (new sdo.SdoReadRequest(1, 0x60F4)).GetResultAsync().Result.ToDebugString());
+    //      Console.WriteLine();
+    //      await Task.Delay(1000);
+    // }
 
     // var ms = new Stopwatch();
     // ms.Start();

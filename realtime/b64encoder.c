@@ -120,7 +120,6 @@ int b64_decode(const char *in, unsigned char *out, size_t outlen)
 		v = (v << 6) | b64invs[in[i+1]-43];
 		v = in[i+2]=='=' ? v << 6 : (v << 6) | b64invs[in[i+2]-43];
 		v = in[i+3]=='=' ? v << 6 : (v << 6) | b64invs[in[i+3]-43];
-
 		out[j] = (v >> 16) & 0xFF;
 		if (in[i+2] != '=')
 			out[j+1] = (v >> 8) & 0xFF;
