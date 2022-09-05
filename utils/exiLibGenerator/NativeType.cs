@@ -2,14 +2,15 @@ internal class NativeTypes {
     public abstract class NativeTypeBase : EthercatType {
         internal abstract Type GetNativeType();
         internal override void WriteCSharpDefinition(StreamWriter ws) {
-            ws.WriteLine($"public class {GetCsharpClassName()} {{");
-            var returnType =  GetNativeType();
-            ws.WriteLine($"    public {returnType.FullName}? Value {{get; set; }}");
-            ws.WriteLine("}");
+            //Native types are not written, They are after all, native
+            // ws.WriteLine($"public class {GetCsharpClassName()} {{");
+            // var returnType =  GetNativeType();
+            // ws.WriteLine($"    public {returnType.FullName}? Value {{get; set; }}");
+            // ws.WriteLine("}");
         }       
 
       public override string GetCsharpClassName(){
-        return "_" + base.GetCsharpClassName().ToLower();
+        return "EthercatTypes." + base.GetCsharpClassName().ToUpper();
       }
         
     }

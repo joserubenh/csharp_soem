@@ -1,6 +1,6 @@
 ﻿var exiref  = Path.Combine(Path.Combine(Directory.GetCurrentDirectory(),"../.."),"exi_xml");
 
-var exilib  = Path.Combine(Path.Combine(Directory.GetCurrentDirectory(),"../.."),"exi_dotnet");
+var exilib  = Path.Combine(Path.Combine(Directory.GetCurrentDirectory(),"../../ethersharp/"),"exi_ref");
 if (System.IO.Directory.Exists(exilib)) System.IO.Directory.Delete(exilib,true);
 System.IO.Directory.CreateDirectory(exilib);
 

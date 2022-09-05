@@ -1,3 +1,4 @@
+#include <czmq.h>
 #include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
@@ -42,9 +43,9 @@ void realTimeThread(void *ptr) {
     int64 timeOffset = 0;
     int cyclecount = 0;
     int64 nsCycleTime = *(int *)ptr * 1000; /* cycletime in ns */
-    
+
     boolean isPositionSet = FALSE;
-    int32 pos; 
+    int32 pos;
     while (doRun > RUN_STATE_EXIT) {
         clock_gettime(CLOCK_MONOTONIC, &wakeUpTime);          // Each cycle calculation
         add_timespec(&wakeUpTime, nsCycleTime + timeOffset);  // set sleep cycle
@@ -55,22 +56,23 @@ void realTimeThread(void *ptr) {
             int wkc = ec_receive_processdata(200000);
 
             if ((wkc == expectedWKC) && (doRun >= RUN_RT_PROCESS)) {
-                if (!isPositionSet){
+                if (!isPositionSet) {
                     isPositionSet = TRUE;
                     pos = in_ctb->PositionAV;
                 }
-                pos += 10000;
-                  
-                out_ctb->ModesOfOperation = OP_MODE_CYCLIC_SYNC_POSITION;  //
-                              
+                pos += 1000;
+
+                out_ctb->ModesOfOperation = OP_MODE_CYCLIC_SYNC_POSITION;
+
                 ec_slavet curslave = ec_slave[1];
                 out_ctb->ControlWord = 0x0F;
                 out_ctb->TargetPosition = pos;
-
+                // out_ctb->TargetVelocity = 120;
+                // out_ctb->TargetTorque = 12;
                 cyclecount++;
             }
 
-            ec_sync(ec_DCtime, nsCycleTime,  &timeOffset);
+            ec_sync(ec_DCtime, nsCycleTime, &timeOffset);
         }
     }
 }
@@ -79,10 +81,11 @@ void realTimeThread(void *ptr) {
 char JSONBuffer[BUFFSIZE];
 char sdobuff[50];
 struct json_object *response;
+void *zmqEvent;
 
 int JsonInterface() {
     int rtCommandPipe;
-    int rtStatusPipe;
+    // int rtStatusPipe;
 
     struct json_object *json_input;
     json_tokener *tok;
@@ -93,15 +96,22 @@ int JsonInterface() {
     char *encoded = (char *)malloc(2 * BUFFSIZE);
     char *jsonOutput = (char *)malloc(3 * BUFFSIZE);
 
-       
+    int rc;
 
     while (doRun > RUN_STATE_EXIT) {
-        rtStatusPipe = open("../socket/rt_status", O_WRONLY);
-        rtCommandPipe = open("../socket/rt_command", O_RDONLY);
+        printf("Connecting to hello world server…\n");
+        void *context = zmq_ctx_new();
 
-        printf("ConnectedPipes:\n");
-        size_t dataLength = 0;
-        while ((dataLength = read(rtCommandPipe, JSONBuffer, BUFFSIZE))) {
+
+        zmqEvent = zmq_socket(context, ZMQ_PUB);
+        rc = zmq_bind(zmqEvent, "tcp://*:23456");assert(rc == 0);
+
+        void *zmqCommand = zmq_socket(context, ZMQ_SUB);        
+        rc = zmq_connect(zmqCommand, "tcp://localhost:12345");        assert(rc == 0);
+        rc = zmq_setsockopt(zmqCommand, ZMQ_SUBSCRIBE, "", 0);        assert(rc == 0);
+
+        int dataLength = 0;
+        while ((dataLength = zmq_recv(zmqCommand, JSONBuffer, 1024, 0))) {
             json_input = json_tokener_parse_ex(tok, JSONBuffer, dataLength);
             cmd = (char *)json_object_get_string(json_object_object_get(json_input, "cmd"));
             request_id = (char *)json_object_get_string(json_object_object_get(json_input, "request_id"));
@@ -111,15 +121,18 @@ int JsonInterface() {
                 uint16 index = json_object_get_uint64(json_object_object_get(json_input, "index"));
                 uint8 subindex = json_object_get_uint64(json_object_object_get(json_input, "subIndex"));
                 boolean ca = json_object_get_boolean(json_object_object_get(json_input, "CA"));
-                int readsize = 1024;
-                int wkC = ec_SDOread(slave, index, subindex, ca, &readsize, &sdobuff, 500000000);
+                int readsize = 4;
+                int wkC = ec_SDOread(slave, index, subindex, ca, &readsize, &sdobuff, EC_TIMEOUTRXM);
 
                 b64_encode(sdobuff, readsize, encoded);
 
                 response = json_object_new_object();
                 json_object_object_add(response, "request_id", json_object_new_string(request_id));
                 json_object_object_add(response, "payload", json_object_new_string(encoded));
-                json_object_to_fd(rtStatusPipe, response, JSON_C_TO_STRING_PLAIN);
+
+                const char *strResponse = json_object_to_json_string(response);
+                zmq_send(zmqEvent, strResponse, strlen(strResponse), 0);
+
                 json_object_put(response);
             }
 
@@ -130,11 +143,16 @@ int JsonInterface() {
                 boolean ca = json_object_get_boolean(json_object_object_get(json_input, "CA"));
                 char *pld64 = (char *)json_object_get_string(json_object_object_get(json_input, "pld64"));
                 int decLength = b64_decode(pld64, sdobuff, (size_t)2048);
-                int wkC = ec_SDOwrite(slave, index, subindex, ca, decLength, &sdobuff, 500000000);
+                int wkC = ec_SDOwrite(slave, index, subindex, ca, decLength, &sdobuff, EC_TIMEOUTRXM);
 
+                
+                
                 response = json_object_new_object();
                 json_object_object_add(response, "request_id", json_object_new_string(request_id));
-                json_object_to_fd(rtStatusPipe, response, JSON_C_TO_STRING_PLAIN);
+
+                const char *strResponse = json_object_to_json_string(response);
+                zmq_send(zmqEvent, strResponse, strlen(strResponse), 0);
+
                 json_object_put(response);
             }
 
@@ -142,16 +160,20 @@ int JsonInterface() {
                 response = json_object_new_object();
                 json_object_object_add(response, "request_id", json_object_new_string(request_id));
                 json_object_object_add(response, "ec_dctime", json_object_new_int64(ec_DCtime));
-                json_object_object_add(response, "slave_count", json_object_new_int(ec_slavecount));                
-                json_object_to_fd(rtStatusPipe, response, JSON_C_TO_STRING_PLAIN);
+                json_object_object_add(response, "slave_count", json_object_new_int(ec_slavecount));
+                
+                const char *strResponse = json_object_to_json_string(response);
+                zmq_send(zmqEvent, strResponse, strlen(strResponse), 0);
+
                 json_object_put(response);
             }
 
-
+            printf("%s\n", request_id);
         }
 
-        close(rtCommandPipe);
-        close(rtStatusPipe);
+        sleep(1000);
+        // close(rtCommandPipe);
+        //  close(rtStatusPipe);
     }
 }
 
@@ -161,7 +183,7 @@ int errorExit(char *error, int errorCode) {
 }
 
 int main() {
-    int cycleTimeUS = 5000;  // cycleTime in MICROSECONDS
+    int cycleTimeUS = 1000;  // cycleTime in MICROSECONDS
 
     struct sched_param param;
     int policy = SCHED_OTHER;
@@ -186,13 +208,22 @@ int main() {
 
     ec_config_map(&IOmap);
     ec_configdc();
-    ec_dcsync0(1, TRUE, 5000000U, 0);  // Given in naoseconds
+    ec_dcsync0(1, TRUE, cycleTimeUS * 1000, 0);  // Given in naoseconds
 
     expectedWKC = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
-    ec_slave[0].state = EC_STATE_SAFE_OP;
 
+    ec_slave[0].state = EC_STATE_PRE_OP;
+    ec_writestate(0);
+    ec_statecheck(0, EC_STATE_PRE_OP, EC_TIMEOUTSTATE);
+    printf("ALL SLAVES REACHED EC_STATE_PRE_OP\n");
+
+   // while (1) usleep(100 * 1000);  // QUITAR ESTO!!!
+
+    ec_slave[0].state = EC_STATE_SAFE_OP;
+    ec_writestate(0);
     ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE);
     printf("ALL SLAVES REACHED EC_STATE_SAFE_OP\n");
+
     printf("DC capable : %d\n", ec_configdc());
 
     out_ctb = (output_CTBServo_RxPDO_t *)ec_slave[1].outputs;
@@ -237,12 +268,3 @@ int main() {
 
     // ec_SDOwrite(1,0x1c12,01,FALSE,os,&ob2,EC_TIMEOUTRXM);
 }
-
-// configure the slave
-// map the slave
-// configure distributed clock
-// go to safe-op
-// start pdo data transfer (LRW or LRD/LWR) at the desired DC interval (for example 1ms)
-// check for stable DC clock in all slaves (difference timer)
-// check for stable master clock (digital PLL locked to reference slave)
-// only then request OP

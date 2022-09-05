@@ -16,7 +16,7 @@ internal class ExiReferenceFile {
 
         var dicType = new TypeDictionary();
         dicType.Load(xDevice.XPathSelectElements("./Profile/Dictionary/DataTypes/DataType"));
-        ws.WriteLine($"public class {className} {{");
+        ws.WriteLine($"public class {className}:Device.EthercatSlave {{");
 
         ws.WriteLine($"public sealed class Def {{");
         dicType.Values.ToList().ForEach(x => {

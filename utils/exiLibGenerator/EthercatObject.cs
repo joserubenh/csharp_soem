@@ -17,6 +17,8 @@ internal class EthercatObject {
     }
 
     internal void WriteCsharpObjectDeclaration(StreamWriter ws) {
-        ws.WriteLine($"public readonly Def.{this.ObjectType.GetCsharpClassName() } x{this.ObjectIndex}_{Tools.GetPathSafePascalCase(this.Name)}  = new();");
+        var className = this.ObjectType.GetCsharpClassName();
+        if (!className.StartsWith("EthercatTypes")) className = "Def." +  className;
+        ws.WriteLine($"[ObjectIndex(0x{this.ObjectIndex})]  public readonly {className } x{this.ObjectIndex}_{Tools.GetPathSafePascalCase(this.Name)}  = new();");
     }
 }

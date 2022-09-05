@@ -20,12 +20,12 @@ internal class EthercatSubIndexType : EthercatType {
     }
 
         internal override void WriteCSharpDefinition(StreamWriter ws) {
-            ws.WriteLine($"public class {GetCsharpClassName()} {{");
+            ws.WriteLine($"public class {GetCsharpClassName()}:EthercatTypes.EthercatSubIndexObject {{");
 
             int ct = 0;
-            subItems.ForEach(x=>{
-                ct++;
-               ws.WriteLine($"public readonly {x.SubIndexType!.GetCsharpClassName() } x{ct.ToString("X2")}_{ Tools.GetPathSafePascalCase(x.Name) } = new();");
+            subItems.ForEach(x=>{                
+               ws.WriteLine($"[SubIndex(0x{ct.ToString("X2")})] public readonly {x.SubIndexType!.GetCsharpClassName() } x{ct.ToString("X2")}_{ Tools.GetPathSafePascalCase(x.Name) } = new();");
+               ct++;
             });            
             ws.WriteLine("}");
         }

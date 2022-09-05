@@ -6,6 +6,7 @@
         "cencode.h": "c",
         "string": "c",
         "encode.h": "c",
-        "ethercattype.h": "c"
+        "ethercattype.h": "c",
+        "czmq.h": "c"
     }
 }

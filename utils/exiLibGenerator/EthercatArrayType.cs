@@ -29,12 +29,11 @@ internal class EthercatArrayType : EthercatType {
     }
 
     internal override void WriteCSharpDefinition(StreamWriter ws) {
-            ws.WriteLine($"public class {GetCsharpClassName()} {{");
+            ws.WriteLine($"public class {GetCsharpClassName()}:EthercatTypes.EthercatArrayBase {{");
             Enumerable.Range(0,elements).ToList().ForEach(x=>{                
                 var hexString = (x+1).ToString("X2");
-               ws.WriteLine($" public readonly {baseType!.GetCsharpClassName() } x{hexString } = new();");
+               ws.WriteLine($"[ArrayOffset({x})]  public readonly {baseType!.GetCsharpClassName() } x{hexString } = new();");
             });            
             ws.WriteLine("}");
         }
-
 }
